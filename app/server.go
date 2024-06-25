@@ -18,12 +18,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	connection, err := listener.Accept()
-	if err != nil {
-		fmt.Println("Error accepting connection: ", err.Error())
-		os.Exit(1)
+	for {
+		connection, err := listener.Accept()
+		if err != nil {
+			fmt.Println("Error accepting connection: ", err.Error())
+			os.Exit(1)
+		}
+
+		go handleConnection(connection)
 	}
 
+}
+
+func handleConnection(connection net.Conn) {
 	requestBuffer := make([]byte, 1024)
 	n, err := connection.Read(requestBuffer)
 	if err != nil {
