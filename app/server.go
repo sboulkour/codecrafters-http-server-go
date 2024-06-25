@@ -7,6 +7,10 @@ import (
 	"strings"
 )
 
+const (
+	CRLF = "\r\n"
+)
+
 func main() {
 	listener, err := net.Listen("tcp", "0.0.0.0:4221")
 	if err != nil {
@@ -20,11 +24,26 @@ func main() {
 		os.Exit(1)
 	}
 
-	request := make([]byte, 1024)
-	connection.Read(request)
-	if strings.HasPrefix(string(request), "GET / HTTP/1.1") {
-		connection.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
+	requestBuffer := make([]byte, 1024)
+	n, err := connection.Read(requestBuffer)
+	if err != nil {
+		fmt.Println("Error reading request: ", err.Error())
+		os.Exit(1)
+	}
+
+	request := strings.Split(string(requestBuffer[:n]), CRLF)
+	requestStatusLine := strings.Split(request[0], " ")
+	fmt.Println(requestStatusLine)
+
+	requestUri := strings.Split(requestStatusLine[1], "/")
+
+	if requestStatusLine[1] == "/" {
+		connection.Write([]byte("HTTP/1.1 200 OK" + CRLF + CRLF))
+	} else if requestUri[1] == "echo" {
+		responseBody := requestUri[2]
+		responseHeaders := fmt.Sprintf("HTTP/1.1 200 OK"+CRLF+"Content-Type: text/plain"+CRLF+"Content-Length: %d"+CRLF+CRLF, len(responseBody))
+		connection.Write([]byte(responseHeaders + responseBody))
 	} else {
-		connection.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
+		connection.Write([]byte("HTTP/1.1 404 Not Found" + CRLF + CRLF))
 	}
 }
