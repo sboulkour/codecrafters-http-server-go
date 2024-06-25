@@ -37,15 +37,7 @@ func main() {
 
 }
 
-func handleConnection(connection net.Conn, directoryPtr *string) {
-	requestBuffer := make([]byte, 1024)
-	n, err := connection.Read(requestBuffer)
-	if err != nil {
-		fmt.Println("Error reading request: ", err.Error())
-		os.Exit(1)
-	}
-
-	request := strings.Split(string(requestBuffer[:n]), CRLF)
+func actionGet(connection net.Conn, request []string, directoryPtr *string) {
 	requestStatusLine := strings.Split(request[0], " ")
 	fmt.Println(requestStatusLine)
 
@@ -94,4 +86,66 @@ func handleConnection(connection net.Conn, directoryPtr *string) {
 		}
 
 	}
+}
+
+func actionPost(connection net.Conn, request []string, directoryPtr *string) {
+	requestStatusLine := strings.Split(request[0], " ")
+	fmt.Println(requestStatusLine)
+	requestUri := strings.Split(requestStatusLine[1], "/")
+
+	if len(requestUri) < 3 {
+		connection.Write([]byte("HTTP/1.1 400 Bad Request" + CRLF + CRLF))
+		return
+	}
+
+	filename := filepath.Base(requestUri[2]) // Utilisez filepath.Base pour la sécurité
+	filePath := filepath.Join(*directoryPtr, filename)
+
+	// Trouver la ligne vide qui sépare l'en-tête du corps
+	emptyLineIndex := -1
+	for i, line := range request {
+		if line == "" {
+			emptyLineIndex = i
+			break
+		}
+	}
+
+	if emptyLineIndex == -1 {
+		connection.Write([]byte("HTTP/1.1 400 Bad Request" + CRLF + CRLF))
+		return
+	}
+
+	// Reconstruire le corps de la requête
+	body := strings.Join(request[emptyLineIndex+1:], CRLF)
+	requestBody := []byte(body)
+
+	err := os.WriteFile(filePath, requestBody, 0644)
+	if err != nil {
+		connection.Write([]byte("HTTP/1.1 500 Internal Server Error" + CRLF + CRLF))
+		fmt.Println("Error writing file:", err.Error())
+		return
+	}
+
+	connection.Write([]byte("HTTP/1.1 201 Created" + CRLF + CRLF))
+	connection.Close()
+}
+
+func handleConnection(connection net.Conn, directoryPtr *string) {
+	requestBuffer := make([]byte, 1024)
+	n, err := connection.Read(requestBuffer)
+	if err != nil {
+		fmt.Println("Error reading request: ", err.Error())
+		os.Exit(1)
+	}
+
+	request := strings.Split(string(requestBuffer[:n]), CRLF)
+	requestStatusLine := strings.Split(request[0], " ")
+	fmt.Println(requestStatusLine)
+
+	if requestStatusLine[0] == "POST" {
+		actionPost(connection, request, directoryPtr)
+	} else {
+		actionGet(connection, request, directoryPtr)
+	}
+
 }
