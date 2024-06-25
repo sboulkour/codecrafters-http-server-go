@@ -1,9 +1,11 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -12,6 +14,11 @@ const (
 )
 
 func main() {
+
+	directoryPtr := flag.String("directory", "/tmp", "Directory to serve")
+	flag.Parse()
+	fmt.Println("Working directory: ", *directoryPtr)
+
 	listener, err := net.Listen("tcp", "0.0.0.0:4221")
 	if err != nil {
 		fmt.Println("Failed to bind to port 4221")
@@ -25,12 +32,12 @@ func main() {
 			os.Exit(1)
 		}
 
-		go handleConnection(connection)
+		go handleConnection(connection, directoryPtr)
 	}
 
 }
 
-func handleConnection(connection net.Conn) {
+func handleConnection(connection net.Conn, directoryPtr *string) {
 	requestBuffer := make([]byte, 1024)
 	n, err := connection.Read(requestBuffer)
 	if err != nil {
@@ -46,19 +53,45 @@ func handleConnection(connection net.Conn) {
 
 	if requestStatusLine[1] == "/" {
 		connection.Write([]byte("HTTP/1.1 200 OK" + CRLF + CRLF))
-	} else if requestUri[1] == "echo" {
-		responseBody := requestUri[2]
-		responseHeaders := fmt.Sprintf("HTTP/1.1 200 OK"+CRLF+"Content-Type: text/plain"+CRLF+"Content-Length: %d"+CRLF+CRLF, len(responseBody))
-		connection.Write([]byte(responseHeaders + responseBody))
-	} else if requestUri[1] == "user-agent" {
-		for index, line := range request {
-			if strings.HasPrefix(request[index], "User-Agent: ") {
-				responseBody := strings.TrimPrefix(line, "User-Agent: ")
-				responseHeaders := fmt.Sprintf("HTTP/1.1 200 OK"+CRLF+"Content-Type: text/plain"+CRLF+"Content-Length: %d"+CRLF+CRLF, len(responseBody))
-				connection.Write([]byte(responseHeaders + responseBody))
-			}
-		}
 	} else {
-		connection.Write([]byte("HTTP/1.1 404 Not Found" + CRLF + CRLF))
+		switch requestUri[1] {
+		case "echo":
+			responseBody := requestUri[2]
+			responseHeaders := fmt.Sprintf("HTTP/1.1 200 OK"+CRLF+"Content-Type: text/plain"+CRLF+"Content-Length: %d"+CRLF+CRLF, len(responseBody))
+			connection.Write([]byte(responseHeaders + responseBody))
+			connection.Close()
+		case "user-agent":
+			for index, line := range request {
+				if strings.HasPrefix(request[index], "User-Agent: ") {
+					responseBody := strings.TrimPrefix(line, "User-Agent: ")
+					responseHeaders := fmt.Sprintf("HTTP/1.1 200 OK"+CRLF+"Content-Type: text/plain"+CRLF+"Content-Length: %d"+CRLF+CRLF, len(responseBody))
+					connection.Write([]byte(responseHeaders + responseBody))
+					connection.Close()
+				}
+			}
+		case "files":
+			if len(requestUri[2]) > 2 {
+				filePath := filepath.Join(*directoryPtr, requestUri[2])
+
+				fileContent, err := os.ReadFile(filePath)
+				if err != nil {
+					connection.Write([]byte("HTTP/1.1 404 Not Found" + CRLF + CRLF))
+					fmt.Println("Error reading file: ", err.Error())
+					connection.Close()
+					return
+				}
+				responseBody := string(fileContent)
+				responseHeaders := fmt.Sprintf("HTTP/1.1 200 OK"+CRLF+"Content-Type: application/octet-stream"+CRLF+"Content-Length: %d"+CRLF+CRLF, len(responseBody))
+				connection.Write([]byte(responseHeaders + responseBody))
+				connection.Close()
+			} else {
+				connection.Write([]byte("HTTP/1.1 404 Not Found" + CRLF + CRLF))
+				connection.Close()
+			}
+		default:
+			connection.Write([]byte("HTTP/1.1 404 Not Found" + CRLF + CRLF))
+			connection.Close()
+		}
+
 	}
 }
