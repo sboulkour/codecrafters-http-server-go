@@ -43,6 +43,14 @@ func main() {
 		responseBody := requestUri[2]
 		responseHeaders := fmt.Sprintf("HTTP/1.1 200 OK"+CRLF+"Content-Type: text/plain"+CRLF+"Content-Length: %d"+CRLF+CRLF, len(responseBody))
 		connection.Write([]byte(responseHeaders + responseBody))
+	} else if requestUri[1] == "user-agent" {
+		for index, line := range request {
+			if strings.HasPrefix(request[index], "User-Agent: ") {
+				responseBody := strings.TrimPrefix(line, "User-Agent: ")
+				responseHeaders := fmt.Sprintf("HTTP/1.1 200 OK"+CRLF+"Content-Type: text/plain"+CRLF+"Content-Length: %d"+CRLF+CRLF, len(responseBody))
+				connection.Write([]byte(responseHeaders + responseBody))
+			}
+		}
 	} else {
 		connection.Write([]byte("HTTP/1.1 404 Not Found" + CRLF + CRLF))
 	}
